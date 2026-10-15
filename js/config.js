@@ -15,7 +15,7 @@ const CONFIG = {
   // URL del Web App de Google Apps Script (se configura tras desplegar el archivo Code.gs)
   // Puedes pegar aquí tu URL desplegada de Google Apps Script:
   // Ejemplo: "https://script.google.com/macros/s/AKfycbx.../exec"
-  APPS_SCRIPT_WEBAPP_URL: "https://script.google.com/macros/s/TU_ID_AQUI/exec",
+  APPS_SCRIPT_WEBAPP_URL: "https://script.google.com/macros/s/AKfycbwDJk7B27vD0INbcUfco6lG1E04Bf3N2SI9793G4MDxuImXLGbCTUpplcw0oodcXk-H7A/exec",
 
   // Modo Demo: permite probar la app inmediatamente en el navegador
   // sin configurar Google Apps Script o cuando no hay conexión.
