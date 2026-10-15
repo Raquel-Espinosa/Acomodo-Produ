@@ -7,6 +7,8 @@ const AppState = {
   currentPasillo: null,
   currentMaterial: null,
   currentRegistroId: null,
+  currentMaterialStatus: "Pendiente", // 'Asignado' | 'Completado' | 'Liberado'
+  sessionProcessedMaterials: [],      // Materiales ya trabajados o vistos en este pasillo
   taskStartTime: null,
   timerInterval: null,
   productividadList: [],
@@ -64,7 +66,7 @@ function setupEventListeners() {
     inputPasillo.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        consultarMaterialPasillo();
+        consultarMaterialPasillo(false);
       }
     });
   }
@@ -188,9 +190,15 @@ function onLoginSuccess(user) {
 }
 
 function cerrarSesion() {
+  if (AppState.currentMaterial && AppState.currentMaterialStatus === "Asignado") {
+    API.liberarMaterial(AppState.currentMaterial.material, AppState.currentPasillo, AppState.currentUser?.usuario);
+  }
+
   AppState.currentUser = null;
   AppState.currentPasillo = null;
   AppState.currentMaterial = null;
+  AppState.currentMaterialStatus = "Pendiente";
+  AppState.sessionProcessedMaterials = [];
   detenerCronometro();
   sessionStorage.removeItem("acomodo_current_user");
 
@@ -200,7 +208,7 @@ function cerrarSesion() {
   document.getElementById("input-password").value = "";
 
   showView("view-login");
-  showToast("Sesión cerrada", "info");
+  showToast("Sesión cerrada y materiales liberados", "info");
 }
 
 // ==========================================================================
@@ -221,9 +229,17 @@ function numpadClear() {
   input.value = "";
 }
 
-async function consultarMaterialPasillo() {
+/**
+ * Consulta el material con menor porcentaje del pasillo
+ * @param {boolean} keepSession - Si es true, excluye los materiales ya vistos en esta sesión
+ */
+async function consultarMaterialPasillo(keepSession = false) {
   const input = document.getElementById("input-pasillo-display");
-  const pasillo = input ? input.value.trim() : "";
+  let pasillo = input ? input.value.trim() : "";
+
+  if (!pasillo && AppState.currentPasillo) {
+    pasillo = AppState.currentPasillo;
+  }
 
   if (!pasillo) {
     showToast("Por favor indica el número de pasillo a surtir", "warning");
@@ -231,18 +247,32 @@ async function consultarMaterialPasillo() {
     return;
   }
 
+  if (!keepSession) {
+    // Si es un pasillo nuevo o búsqueda desde cero, limpiamos los excluidos
+    AppState.sessionProcessedMaterials = [];
+  }
+
   const btnSpinner = document.getElementById("pasillo-btn-spinner");
   const btnText = document.getElementById("pasillo-btn-text");
 
-  btnSpinner.classList.remove("hidden");
-  btnText.textContent = "Buscando menor porcentaje...";
+  if (btnSpinner) btnSpinner.classList.remove("hidden");
+  if (btnText) btnText.textContent = "Buscando menor porcentaje...";
 
   try {
-    const res = await API.getMaterialByPasillo(pasillo);
+    const usuarioActual = AppState.currentUser ? AppState.currentUser.usuario : "";
+    const res = await API.getMaterialByPasillo(pasillo, usuarioActual, AppState.sessionProcessedMaterials);
 
     if (res.success && res.material) {
       AppState.currentPasillo = pasillo;
       AppState.currentMaterial = res.material;
+      AppState.currentMaterialStatus = "Asignado";
+
+      // Registrar en la lista de exclusión para que la próxima llamada a "Siguiente Material"
+      // busque el próximo material con menor porcentaje
+      if (!AppState.sessionProcessedMaterials.includes(res.material.material)) {
+        AppState.sessionProcessedMaterials.push(res.material.material);
+      }
+
       playAudioNotification("beep");
 
       // Cargar datos en la tarjeta del material
@@ -255,15 +285,25 @@ async function consultarMaterialPasillo() {
       showView("view-operador-material");
       iniciarCronometro();
 
+      showToast(`Material ${res.material.material} bloqueado y asignado a ti`, "success");
+
     } else {
-      showToast(res.message || `No hay materiales pendientes en el pasillo ${pasillo}`, "error");
+      showToast(res.message || `No hay más materiales disponibles en el pasillo ${pasillo}`, "warning");
       playAudioNotification("error");
+      
+      // Si ya habíamos procesado materiales y no hay más, sugerir volver
+      if (AppState.sessionProcessedMaterials.length > 0) {
+        const volver = confirm(`No hay más materiales pendientes en el pasillo ${pasillo}.\n¿Deseas cambiar a otro pasillo?`);
+        if (volver) {
+          regresarAPasillos(true);
+        }
+      }
     }
   } catch (err) {
     showToast("Error al consultar inventario: " + err.message, "error");
   } finally {
-    btnSpinner.classList.add("hidden");
-    btnText.textContent = "Consultar Material Prioritario";
+    if (btnSpinner) btnSpinner.classList.add("hidden");
+    if (btnText) btnText.textContent = "Consultar Material Prioritario";
     initIcons();
   }
 }
@@ -286,6 +326,13 @@ function cargarTarjetaMaterial(mat, pasillo) {
 
   if (AppState.currentUser) {
     document.getElementById("mat-operador-asignado").textContent = AppState.currentUser.nombre || AppState.currentUser.usuario;
+  }
+
+  // Estado visual
+  const estadoBadge = document.getElementById("mat-estado-badge");
+  if (estadoBadge) {
+    estadoBadge.className = "px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold border border-blue-200 text-xs";
+    estadoBadge.textContent = "Asignado a ti";
   }
 }
 
@@ -314,7 +361,6 @@ async function registrarAsignacionProductividad(mat, pasillo) {
     const res = await API.saveProductividad(payload);
     if (res.success && res.idRegistro) {
       AppState.currentRegistroId = res.idRegistro;
-      showToast("Material asignado y registrado en hoja Productividad", "success");
     }
   } catch (e) {
     console.error("Error al registrar en hoja de productividad:", e);
@@ -330,8 +376,8 @@ async function completarTareaActual() {
   const btnSpinner = document.getElementById("complete-btn-spinner");
   const btnText = document.getElementById("complete-btn-text");
 
-  btnSpinner.classList.remove("hidden");
-  btnText.textContent = "Guardando en Productividad...";
+  if (btnSpinner) btnSpinner.classList.remove("hidden");
+  if (btnText) btnText.textContent = "Guardando en Productividad...";
 
   // Calcular minutos transcurridos
   const now = new Date();
@@ -339,37 +385,128 @@ async function completarTareaActual() {
   const minutos = Number((diffMs / 60000).toFixed(1));
 
   try {
-    const res = await API.finalizarTarea(AppState.currentRegistroId, minutos);
+    const res = await API.finalizarTarea(
+      AppState.currentRegistroId, 
+      minutos, 
+      AppState.currentMaterial.material, 
+      AppState.currentPasillo
+    );
+
+    AppState.currentMaterialStatus = "Completado";
     detenerCronometro();
     playAudioNotification("success");
-    showToast(`¡Acomodo completado en ${minutos} min! Datos guardados en Productividad.`, "success");
+    showToast(`¡Acomodo de ${AppState.currentMaterial.material} completado en ${minutos} min!`, "success");
 
-    // Modal o aviso para siguiente paso
-    const seguirEnPasillo = confirm(`¿Deseas continuar surtiendo el pasillo ${AppState.currentPasillo}?`);
-    if (seguirEnPasillo) {
-      consultarMaterialPasillo();
-    } else {
-      regresarAPasillos();
+    // Actualizar badge visual
+    const estadoBadge = document.getElementById("mat-estado-badge");
+    if (estadoBadge) {
+      estadoBadge.className = "px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200 text-xs";
+      estadoBadge.textContent = "Completado ✓";
     }
+
+    // Ofrecer pasar al siguiente material con menor porcentaje
+    setTimeout(() => {
+      const seguirEnPasillo = confirm(`¿Deseas surtir el SIGUIENTE material con menor porcentaje del pasillo ${AppState.currentPasillo}?`);
+      if (seguirEnPasillo) {
+        consultarMaterialPasillo(true);
+      } else {
+        regresarAPasillos(true);
+      }
+    }, 400);
+
   } catch (err) {
     showToast("Error al guardar tarea: " + err.message, "error");
   } finally {
-    btnSpinner.classList.add("hidden");
-    btnText.textContent = "Marcar Acomodo como Completado";
+    if (btnSpinner) btnSpinner.classList.add("hidden");
+    if (btnText) btnText.textContent = "Marcar Acomodo como Completado";
     initIcons();
   }
 }
 
+/**
+ * Lógica cuando el operador presiona "Siguiente Material"
+ */
 function consultarSiguienteMaterial() {
-  if (AppState.currentPasillo) {
-    consultarMaterialPasillo();
+  if (!AppState.currentMaterial) {
+    consultarMaterialPasillo(false);
+    return;
+  }
+
+  // Si el material actual sigue como "Asignado" (no completado aún), mostramos el modal de decisión
+  if (AppState.currentMaterialStatus === "Asignado") {
+    abrirModalSiguienteMaterial();
   } else {
-    regresarAPasillos();
+    // Si ya estaba completado, cargamos directamente el siguiente con menor porcentaje
+    consultarMaterialPasillo(true);
   }
 }
 
-function regresarAPasillos() {
+function abrirModalSiguienteMaterial() {
+  const modal = document.getElementById("modal-siguiente-material");
+  const codigoEl = document.getElementById("modal-next-mat-codigo");
+  const descEl = document.getElementById("modal-next-mat-desc");
+
+  if (codigoEl && AppState.currentMaterial) codigoEl.textContent = AppState.currentMaterial.material;
+  if (descEl && AppState.currentMaterial) descEl.textContent = AppState.currentMaterial.descripcion;
+
+  if (modal) modal.classList.remove("hidden");
+  initIcons();
+}
+
+function cerrarModalSiguienteMaterial() {
+  const modal = document.getElementById("modal-siguiente-material");
+  if (modal) modal.classList.add("hidden");
+}
+
+async function accionSiguienteMaterial(tipo) {
+  cerrarModalSiguienteMaterial();
+
+  if (tipo === "completar") {
+    // 1. Completar el actual y luego traer el siguiente
+    const now = new Date();
+    const diffMs = AppState.taskStartTime ? (now - AppState.taskStartTime) : 0;
+    const minutos = Number((diffMs / 60000).toFixed(1));
+
+    await API.finalizarTarea(
+      AppState.currentRegistroId, 
+      minutos, 
+      AppState.currentMaterial.material, 
+      AppState.currentPasillo
+    );
+
+    AppState.currentMaterialStatus = "Completado";
+    showToast(`Material ${AppState.currentMaterial.material} completado. Buscando siguiente...`, "info");
+    consultarMaterialPasillo(true);
+
+  } else if (tipo === "posponer") {
+    // 2. Liberar el bloqueo para que otro operador lo tome y pasar al siguiente
+    await API.liberarMaterial(
+      AppState.currentMaterial.material, 
+      AppState.currentPasillo, 
+      AppState.currentUser?.usuario
+    );
+
+    AppState.currentMaterialStatus = "Liberado";
+    showToast(`Material ${AppState.currentMaterial.material} liberado. Buscando siguiente con menor %...`, "info");
+    consultarMaterialPasillo(true);
+  }
+}
+
+function regresarAPasillos(forzar = false) {
+  if (!forzar && AppState.currentMaterial && AppState.currentMaterialStatus === "Asignado") {
+    const confirmar = confirm(`Tienes el material ${AppState.currentMaterial.material} asignado.\n¿Deseas liberarlo para que otro operador pueda surtirlo?`);
+    if (confirmar) {
+      API.liberarMaterial(AppState.currentMaterial.material, AppState.currentPasillo, AppState.currentUser?.usuario);
+      AppState.currentMaterialStatus = "Liberado";
+    } else {
+      return; // Permanece en el material actual
+    }
+  }
+
   detenerCronometro();
+  AppState.currentMaterial = null;
+  AppState.currentMaterialStatus = "Pendiente";
+  
   showView("view-operador-pasillo");
   const input = document.getElementById("input-pasillo-display");
   if (input) {
@@ -772,7 +909,6 @@ function showToast(message, type = "info") {
   }, 4000);
 }
 
-// Generador de audio Web Audio API para simular feedback de lector/escáner
 function playAudioNotification(type) {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -809,6 +945,6 @@ function playAudioNotification(type) {
       osc.stop(ctx.currentTime + 0.25);
     }
   } catch (e) {
-    // Si el navegador bloquea audio sin interacción previa, ignorar silenciosamente
+    // Si el navegador bloquea audio sin interacción previa, ignorar
   }
 }

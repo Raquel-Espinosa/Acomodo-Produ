@@ -243,6 +243,25 @@
         </div>
       </div>
 
+      <!-- Banner de Asignación Exclusiva / Bloqueo en Tiempo Real -->
+      <div id="banner-asignacion-exclusiva" class="bg-slate-900 text-blue-100 rounded-xl p-3.5 border border-blue-500/40 flex items-center justify-between shadow-md">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-blue-600/30 text-blue-400 flex items-center justify-center shrink-0 border border-blue-500/30">
+            <i data-lucide="lock" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <p class="text-xs font-bold text-white flex items-center space-x-2">
+              <span>MATERIAL ASIGNADO EXCLUSIVAMENTE A TI</span>
+              <span class="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-emerald-500 text-slate-900">RESERVADO</span>
+            </p>
+            <p class="text-[11px] text-blue-300 mt-0.5">Bloqueado en sistema para que ningún otro operador pueda tomarlo al mismo tiempo.</p>
+          </div>
+        </div>
+        <span id="badge-turno-operador" class="hidden sm:inline-block text-[10px] uppercase font-bold tracking-wider px-2.5 py-1 rounded bg-blue-500/20 text-blue-300 border border-blue-400/30">
+          En Turno
+        </span>
+      </div>
+
       <!-- Tarjeta Principal del Material (Hero Card) -->
       <div class="material-hero-card p-6 sm:p-8 relative overflow-hidden">
         
@@ -648,6 +667,49 @@
           <button type="submit" class="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm">Guardar Usuario</button>
         </div>
       </form>
+
+  <!-- ====================================================================== -->
+  <!-- MODAL: DECISIÓN SIGUIENTE MATERIAL                                     -->
+  <!-- ====================================================================== -->
+  <div id="modal-siguiente-material" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 fade-in">
+      
+      <div class="flex items-center space-x-3 mb-4">
+        <div class="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+          <i data-lucide="help-circle" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-slate-900 text-base">Material en Proceso</h3>
+          <p class="text-xs text-slate-500">¿Qué deseas hacer con el material actual antes de pasar al siguiente?</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 mb-5 text-left">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs text-slate-500 font-semibold uppercase tracking-wider">Material asignado:</span>
+          <span id="modal-next-mat-codigo" class="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">MAT-10023</span>
+        </div>
+        <p class="text-xs text-slate-700 font-medium line-clamp-2" id="modal-next-mat-desc">Descripción del material</p>
+      </div>
+
+      <div class="space-y-2.5">
+        <button onclick="accionSiguienteMaterial('completar')" 
+                class="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-emerald-600/20 flex items-center justify-center space-x-2 transition-colors">
+          <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+          <span>Completar este y ver Siguiente con menor %</span>
+        </button>
+
+        <button onclick="accionSiguienteMaterial('posponer')" 
+                class="w-full py-3 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs sm:text-sm border border-slate-300 flex items-center justify-center space-x-2 transition-colors">
+          <i data-lucide="unlock" class="w-4 h-4 text-slate-600"></i>
+          <span>Liberar / Posponer y ver Siguiente con menor %</span>
+        </button>
+
+        <button onclick="cerrarModalSiguienteMaterial()" 
+                class="w-full py-2.5 px-4 rounded-xl text-slate-500 hover:text-slate-800 text-xs font-semibold">
+          Seguir trabajando en este material (Cancelar)
+        </button>
+      </div>
 
     </div>
   </div>

@@ -43,7 +43,11 @@ function doGet(e) {
         break;
 
       case "getMaterialByPasillo":
-        result = handleGetMaterialByPasillo(params.pasillo);
+        result = handleGetMaterialByPasillo(params.pasillo, params.usuario, params.exclude);
+        break;
+
+      case "liberarMaterial":
+        result = handleLiberarMaterial(params.material, params.pasillo, params.usuario);
         break;
 
       case "getProductividad":
@@ -92,6 +96,10 @@ function doPost(e) {
         result = handleFinalizarTarea(payload);
         break;
 
+      case "liberarMaterial":
+        result = handleLiberarMaterial(payload.material, payload.pasillo, payload.usuario);
+        break;
+
       default:
         result = { success: false, message: "Acción POST no soportada: " + action };
     }
@@ -117,7 +125,6 @@ function handleLogin(usuarioInput, passwordInput) {
   const ss = SpreadsheetApp.openById(ID_SHEET_PROD);
   let sheet = ss.getSheetByName(TAB_USUARIOS);
   
-  // Si no existe la pestaña, la crea con datos iniciales
   if (!sheet) {
     sheet = initializeUsuariosSheet(ss);
   }
@@ -172,8 +179,12 @@ function handleLogin(usuarioInput, passwordInput) {
 
 /**
  * 2. Obtener Material de un Pasillo con el MENOR PORCENTAJE (Archivo 1: Base Proyecto)
+ *    - Excluye materiales completados (100% o estado completado).
+ *    - Excluye materiales asignados a OTRO operador para evitar duplicidad.
+ *    - Excluye materiales pasados en la lista exclude (para saltar al siguiente con menor porcentaje).
+ *    - Bloquea/Asigna inmediatamente el material en Base Proyecto a nombre del operador.
  */
-function handleGetMaterialByPasillo(pasilloInput) {
+function handleGetMaterialByPasillo(pasilloInput, usuarioInput, excludeRaw) {
   if (pasilloInput === undefined || pasilloInput === null || String(pasilloInput).trim() === "") {
     return { success: false, message: "Debe especificar el número de pasillo" };
   }
@@ -199,30 +210,60 @@ function handleGetMaterialByPasillo(pasilloInput) {
   const idxP01 = findColumnIndex(headers, ["p01", "p1", "cantidaddep01", "cantp01"]);
   const idxP02 = findColumnIndex(headers, ["p02", "p2", "cantidaddep02", "cantp02"]);
   const idxP03 = findColumnIndex(headers, ["p03", "p3", "cantidaddep03", "cantp03"]);
-  const idxEstatus = findColumnIndex(headers, ["estatus", "estado", "asignado", "status"]);
+  let idxEstatus = findColumnIndex(headers, ["estatus", "estado", "asignado", "status"]);
+
+  // Si no existe columna de estatus en Base Proyecto, la añadimos para poder bloquear
+  if (idxEstatus === -1) {
+    idxEstatus = headers.length;
+    sheet.getRange(1, idxEstatus + 1).setValue("Estatus");
+  }
+
+  // Lista de exclusión (para navegar al siguiente material)
+  let excludeList = [];
+  if (excludeRaw) {
+    if (typeof excludeRaw === "string") {
+      excludeList = excludeRaw.split(",").map(s => s.trim().toLowerCase());
+    } else if (Array.isArray(excludeRaw)) {
+      excludeList = excludeRaw.map(s => String(s).trim().toLowerCase());
+    }
+  }
 
   const cleanPasillo = String(pasilloInput).trim();
+  const cleanUsuario = usuarioInput ? String(usuarioInput).trim().toLowerCase() : "";
 
-  // Filtrar registros que coincidan con el pasillo
+  // 1. Filtrar registros que coincidan con el pasillo
   const itemsEnPasillo = [];
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const rowPasillo = String(row[idxPasillo] || "").trim();
 
-    // Comparar numéricamente o como texto
     const coincidePasillo = (rowPasillo === cleanPasillo) || 
                             (parseFloat(rowPasillo) === parseFloat(cleanPasillo) && !isNaN(parseFloat(cleanPasillo)));
 
     if (coincidePasillo) {
+      const matCode = idxMaterial !== -1 ? String(row[idxMaterial] || "").trim() : "";
+      const estatus = idxEstatus !== -1 ? String(row[idxEstatus] || "").trim() : "";
+      const estatusLower = estatus.toLowerCase();
       const porcentajeRaw = row[idxPorcentaje];
       const porcentajeNum = parsePercentage(porcentajeRaw);
-      const estatus = idxEstatus !== -1 ? String(row[idxEstatus] || "").toLowerCase() : "";
+
+      // Regla de bloqueo: ¿está asignado a OTRA persona?
+      let asignadoAOtro = false;
+      if (estatusLower.includes("asignad")) {
+        // Si no está asignado al usuario actual, está bloqueado
+        if (cleanUsuario && !estatusLower.includes(cleanUsuario)) {
+          asignadoAOtro = true;
+        }
+      }
+
+      // Regla de exclusión: ¿ya fue procesado o saltado en esta sesión?
+      const estaExcluido = excludeList.includes(matCode.toLowerCase());
 
       itemsEnPasillo.push({
         rowIndex: i + 1,
         pasillo: rowPasillo,
-        material: idxMaterial !== -1 ? String(row[idxMaterial] || "") : "",
+        material: matCode,
         descripcion: idxDesc !== -1 ? String(row[idxDesc] || "") : "",
         porcentajeRaw: porcentajeRaw,
         porcentaje: porcentajeNum,
@@ -230,7 +271,9 @@ function handleGetMaterialByPasillo(pasilloInput) {
         p01: idxP01 !== -1 ? parseQty(row[idxP01]) : 0,
         p02: idxP02 !== -1 ? parseQty(row[idxP02]) : 0,
         p03: idxP03 !== -1 ? parseQty(row[idxP03]) : 0,
-        estatus: estatus
+        estatus: estatus,
+        asignadoAOtro: asignadoAOtro,
+        estaExcluido: estaExcluido
       });
     }
   }
@@ -242,31 +285,68 @@ function handleGetMaterialByPasillo(pasilloInput) {
     };
   }
 
-  // Filtrar primero los que no estén completados (100% o estado 'completado')
-  let pendientes = itemsEnPasillo.filter(item => {
-    return !item.estatus.includes("complet") && item.porcentaje < 100;
+  // 2. Filtrar candidatos disponibles:
+  // - No completados (< 100% y no 'completado')
+  // - No asignados a otro operador
+  // - No excluidos por la sesión actual
+  let candidatos = itemsEnPasillo.filter(item => {
+    return !item.estatus.toLowerCase().includes("complet") && 
+           item.porcentaje < 100 && 
+           !item.asignadoAOtro && 
+           !item.estaExcluido;
   });
 
-  // Si todos tienen 100% o están completados, tomamos el universo completo
-  if (pendientes.length === 0) {
-    pendientes = itemsEnPasillo;
+  if (candidatos.length === 0) {
+    // Si no hay candidatos, verificar si es porque están asignados a otros
+    const asignadosOtros = itemsEnPasillo.filter(item => item.asignadoAOtro);
+    if (asignadosOtros.length > 0) {
+      return {
+        success: false,
+        message: "Todos los materiales pendientes del Pasillo " + cleanPasillo + " están siendo surtidos por otros operadores."
+      };
+    }
+    return {
+      success: false,
+      message: "¡Excelente! No hay más materiales pendientes para surtir en el Pasillo " + cleanPasillo + "."
+    };
   }
 
-  // ORDENAR POR MENOR PORCENTAJE (ASCENDENTE)
-  pendientes.sort((a, b) => a.porcentaje - b.porcentaje);
+  // 3. ORDENAR POR MENOR PORCENTAJE (ASCENDENTE)
+  candidatos.sort((a, b) => a.porcentaje - b.porcentaje);
 
-  const materialElegido = pendientes[0];
+  const materialElegido = candidatos[0];
+
+  // 4. BLOQUEAR / ASIGNAR EN BASE PROYECTO A ESTE OPERADOR
+  if (materialElegido && cleanUsuario) {
+    const estatusAsignado = "Asignado - " + (usuarioInput || cleanUsuario);
+    sheet.getRange(materialElegido.rowIndex, idxEstatus + 1).setValue(estatusAsignado);
+    materialElegido.estatus = estatusAsignado;
+  }
 
   return {
     success: true,
     material: materialElegido,
     totalMaterialesEnPasillo: itemsEnPasillo.length,
-    pendientesEnPasillo: pendientes.length
+    candidatosRestantes: candidatos.length
   };
 }
 
 /**
- * 3. Guardar registro en la hoja "Productividad" del Archivo 2
+ * 3. Liberar material (cuando el operador pospone o cancela sin completar)
+ */
+function handleLiberarMaterial(materialCode, pasillo, usuario) {
+  if (!materialCode) return { success: false, message: "Material requerido" };
+
+  updateBaseProyectoStatus(materialCode, pasillo, "Pendiente");
+
+  return {
+    success: true,
+    message: "Material " + materialCode + " liberado para que otro operador lo pueda tomar."
+  };
+}
+
+/**
+ * 4. Guardar registro en la hoja "Productividad" del Archivo 2
  */
 function handleSaveProductividad(payload) {
   const ss = SpreadsheetApp.openById(ID_SHEET_PROD);
@@ -312,7 +392,7 @@ function handleSaveProductividad(payload) {
 }
 
 /**
- * 4. Actualizar registro al Finalizar la tarea
+ * 5. Actualizar registro al Finalizar la tarea y marcar en Base Proyecto como Completado
  */
 function handleFinalizarTarea(payload) {
   const ss = SpreadsheetApp.openById(ID_SHEET_PROD);
@@ -334,6 +414,12 @@ function handleFinalizarTarea(payload) {
       if (payload.minutosTranscurridos) {
         sheet.getRange(i + 1, 17).setValue(payload.minutosTranscurridos);
       }
+      
+      // Marcar en la Base Proyecto como "Completado"
+      if (payload.material) {
+        updateBaseProyectoStatus(payload.material, payload.pasillo, "Completado");
+      }
+
       return { success: true, message: "Tarea completada y guardada en hoja Productividad" };
     }
   }
@@ -342,7 +428,46 @@ function handleFinalizarTarea(payload) {
 }
 
 /**
- * 5. Consultar registros de Productividad para el Administrativo
+ * Helper para actualizar el estatus de un material en la hoja "Base Proyecto" del Archivo 1
+ */
+function updateBaseProyectoStatus(materialCode, pasillo, nuevoEstatus) {
+  try {
+    const ss = SpreadsheetApp.openById(ID_SHEET_BASE);
+    const sheet = ss.getSheetByName(TAB_BASE_PROYECTO);
+    if (!sheet) return;
+
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return;
+
+    const headers = data[0].map(h => normalizeHeader(h));
+    let idxEstatus = findColumnIndex(headers, ["estatus", "estado", "asignado", "status"]);
+    if (idxEstatus === -1) {
+      idxEstatus = headers.length;
+      sheet.getRange(1, idxEstatus + 1).setValue("Estatus");
+    }
+
+    const idxMaterial = findColumnIndex(headers, ["material", "codigo", "sku", "articulo", "clave"]);
+    const idxPasillo = findColumnIndex(headers, ["pasillo", "aisle", "rack"]);
+
+    for (let i = 1; i < data.length; i++) {
+      const rowMat = idxMaterial !== -1 ? String(data[i][idxMaterial] || "").trim() : "";
+      const rowPas = idxPasillo !== -1 ? String(data[i][idxPasillo] || "").trim() : "";
+
+      const coincideMat = (rowMat === String(materialCode).trim());
+      const coincidePas = !pasillo || (rowPas === String(pasillo).trim());
+
+      if (coincideMat && coincidePas) {
+        sheet.getRange(i + 1, idxEstatus + 1).setValue(nuevoEstatus);
+        break;
+      }
+    }
+  } catch (err) {
+    Logger.log("Error al actualizar estatus en Base Proyecto: " + err);
+  }
+}
+
+/**
+ * 6. Consultar registros de Productividad para el Administrativo
  */
 function handleGetProductividad(params) {
   const ss = SpreadsheetApp.openById(ID_SHEET_PROD);
@@ -403,7 +528,7 @@ function handleGetProductividad(params) {
 }
 
 /**
- * 6. Consultar Usuarios para el Administrativo
+ * 7. Consultar Usuarios para el Administrativo
  */
 function handleGetUsuarios() {
   const ss = SpreadsheetApp.openById(ID_SHEET_PROD);
@@ -429,7 +554,7 @@ function handleGetUsuarios() {
 }
 
 /**
- * 7. Crear nuevo usuario en la hoja "Usuarios"
+ * 8. Crear nuevo usuario en la hoja "Usuarios"
  */
 function handleSaveUsuario(payload) {
   const ss = SpreadsheetApp.openById(ID_SHEET_PROD);
@@ -479,7 +604,6 @@ function findColumnIndex(headers, candidates) {
 function parsePercentage(val) {
   if (val === undefined || val === null || val === "") return 0;
   if (typeof val === "number") {
-    // Si viene como 0.15 equivale a 15%
     return val <= 1 && val > 0 ? val * 100 : val;
   }
   const clean = String(val).replace("%", "").replace(",", ".").trim();
