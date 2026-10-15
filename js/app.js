@@ -851,6 +851,26 @@ function guardarConfigModal() {
   showToast("Configuración guardada", "success");
 }
 
+function restablecerDatosDemoModal() {
+  const confirmar = confirm("¿Deseas restablecer todos los materiales y bitácoras de demostración a su estado original?");
+  if (confirmar) {
+    API.resetDemoData();
+    AppState.currentMaterial = null;
+    AppState.currentMaterialStatus = "Pendiente";
+    AppState.sessionProcessedMaterials = [];
+    detenerCronometro();
+    showToast("Datos de demostración restablecidos", "success");
+    cerrarModalConfig();
+    if (AppState.currentUser) {
+      if (AppState.currentUser.rol.toLowerCase().includes("admin")) {
+        cargarProductividadAdmin();
+      } else {
+        regresarAPasillos(true);
+      }
+    }
+  }
+}
+
 function actualizarIndicadorConexion() {
   const dot = document.getElementById("status-dot");
   const text = document.getElementById("status-text");
