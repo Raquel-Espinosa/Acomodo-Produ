@@ -315,40 +315,23 @@ function handleGetMaterialByPasillo(pasilloInput, usuarioInput, excludeRaw) {
   if (itemsEnPasillo.length === 0) {
     return {
       success: false,
-      message: "No se encontraron materiales para el Pasillo " + cleanPasillo + ". Verifique el número ingresado."
+      message: "Ese pasillo no tiene actividad por realizar"
     };
   }
 
   // 4. FILTRAR CANDIDATOS DISPONIBLES:
   //    - NO completados (ni en Base Proyecto ni en Productividad)
-  //    - NO asignados previamente (así no se repite un material ya mandado)
+  //    - Porcentaje menor a 100 (actividad pendiente)
+  //    - NO asignados previamente
   //    - NO excluidos en esta sesión
   let candidatos = itemsEnPasillo.filter(item => {
-    return !item.yaCompletado && !item.yaAsignado && !item.estaExcluido;
+    return !item.yaCompletado && item.porcentaje < 100 && !item.yaAsignado && !item.estaExcluido;
   });
 
   if (candidatos.length === 0) {
-    // Verificar si todos están completados
-    const completadosCount = itemsEnPasillo.filter(item => item.yaCompletado).length;
-    if (completadosCount === itemsEnPasillo.length) {
-      return {
-        success: false,
-        message: "¡Excelente! Todos los materiales del Pasillo " + cleanPasillo + " ya han sido trabajados y completados."
-      };
-    }
-
-    // Verificar si los restantes están asignados a otros
-    const asignadosCount = itemsEnPasillo.filter(item => item.yaAsignado).length;
-    if (asignadosCount > 0) {
-      return {
-        success: false,
-        message: "Los materiales restantes del Pasillo " + cleanPasillo + " están siendo surtidos por otros operadores."
-      };
-    }
-
     return {
       success: false,
-      message: "No hay más materiales pendientes para surtir en el Pasillo " + cleanPasillo + "."
+      message: "Ese pasillo no tiene actividad por realizar"
     };
   }
 

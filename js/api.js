@@ -219,7 +219,7 @@ const API = {
     if (itemsEnPasillo.length === 0) {
       return {
         success: false,
-        message: `No se encontraron materiales para el Pasillo ${cleanPasillo}. Verifique el número de pasillo.`
+        message: "Ese pasillo no tiene actividad por realizar"
       };
     }
 
@@ -241,26 +241,13 @@ const API = {
 
       const yaExcluido = excludeNorm.includes(matLower);
 
-      return !yaCompletado && !yaAsignado && !yaExcluido;
+      return !yaCompletado && item.porcentaje < 100 && !yaAsignado && !yaExcluido;
     });
 
     if (candidatos.length === 0) {
-      // Verificar si todos están completados
-      const todosCompletados = itemsEnPasillo.every(i => {
-        const matLower = String(i.material).trim().toLowerCase();
-        return (i.estatus || "").toLowerCase().includes("complet") || i.porcentaje >= 100 || materialesTrabajados.has(matLower);
-      });
-
-      if (todosCompletados) {
-        return {
-          success: false,
-          message: `¡Excelente! Todos los materiales del Pasillo ${cleanPasillo} ya han sido trabajados y completados.`
-        };
-      }
-
       return {
         success: false,
-        message: `No hay más materiales pendientes para surtir en el Pasillo ${cleanPasillo}.`
+        message: "Ese pasillo no tiene actividad por realizar"
       };
     }
 

@@ -215,6 +215,7 @@ function cerrarSesion() {
 // FLUJO OPERADOR: TECLADO Y SELECCIÓN DE PASILLO
 // ==========================================================================
 function numpadPress(digit) {
+  ocultarAlertaPasillo();
   const input = document.getElementById("input-pasillo-display");
   if (!input) return;
   playAudioNotification("click");
@@ -223,10 +224,28 @@ function numpadPress(digit) {
 }
 
 function numpadClear() {
+  ocultarAlertaPasillo();
   const input = document.getElementById("input-pasillo-display");
   if (!input) return;
   playAudioNotification("click");
   input.value = "";
+}
+
+function mostrarAlertaPasillo(texto) {
+  const alertBox = document.getElementById("pasillo-alert-msg");
+  const alertText = document.getElementById("pasillo-alert-text");
+  if (alertBox && alertText) {
+    alertText.textContent = texto || "Ese pasillo no tiene actividad por realizar";
+    alertBox.classList.remove("hidden");
+    initIcons();
+  }
+}
+
+function ocultarAlertaPasillo() {
+  const alertBox = document.getElementById("pasillo-alert-msg");
+  if (alertBox) {
+    alertBox.classList.add("hidden");
+  }
 }
 
 /**
@@ -246,6 +265,8 @@ async function consultarMaterialPasillo(keepSession = false) {
     if (input) input.focus();
     return;
   }
+
+  ocultarAlertaPasillo();
 
   if (!keepSession) {
     // Si es un pasillo nuevo o búsqueda desde cero, limpiamos los excluidos
@@ -288,19 +309,26 @@ async function consultarMaterialPasillo(keepSession = false) {
       showToast(`Material ${res.material.material} bloqueado y asignado a ti`, "success");
 
     } else {
-      showToast(res.message || `No hay más materiales disponibles en el pasillo ${pasillo}`, "warning");
+      const mensaje = res.message || "Ese pasillo no tiene actividad por realizar";
+      mostrarAlertaPasillo(mensaje);
+      showToast(mensaje, "warning");
       playAudioNotification("error");
       
-      // Si ya habíamos procesado materiales y no hay más, sugerir volver
-      if (AppState.sessionProcessedMaterials.length > 0) {
-        const volver = confirm(`No hay más materiales pendientes en el pasillo ${pasillo}.\n¿Deseas cambiar a otro pasillo?`);
-        if (volver) {
-          regresarAPasillos(true);
-        }
+      // Permitir escoger otro pasillo de inmediato: limpiar campo y dar foco
+      if (input) {
+        input.value = "";
+        input.focus();
+      }
+
+      // Si estaba en la vista del material (ej. navegando), regresar a pasillos para escoger otro
+      if (AppState.currentMaterial) {
+        regresarAPasillos(true);
       }
     }
   } catch (err) {
-    showToast("Error al consultar inventario: " + err.message, "error");
+    const errMsg = err.message || "Error al consultar inventario";
+    mostrarAlertaPasillo(errMsg);
+    showToast(errMsg, "error");
   } finally {
     if (btnSpinner) btnSpinner.classList.add("hidden");
     if (btnText) btnText.textContent = "Consultar Material Prioritario";

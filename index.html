@@ -182,7 +182,13 @@
         </div>
 
         <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">¿Qué pasillo deseas surtir?</h2>
-        <p class="text-sm text-slate-500 mt-1 mb-6">Ingresa el número de pasillo para buscar el material con menor porcentaje.</p>
+        <p class="text-sm text-slate-500 mt-1 mb-5">Ingresa el número de pasillo para buscar el material con menor porcentaje.</p>
+
+        <!-- Mensaje de Alerta: Pasillo sin actividad -->
+        <div id="pasillo-alert-msg" class="hidden mb-4 p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-sm font-semibold flex items-center justify-center space-x-2 fade-in">
+          <i data-lucide="alert-triangle" class="w-5 h-5 text-amber-600 shrink-0"></i>
+          <span id="pasillo-alert-text">Ese pasillo no tiene actividad por realizar</span>
+        </div>
 
         <!-- Display numérico del Pasillo -->
         <div class="mb-6 relative">
