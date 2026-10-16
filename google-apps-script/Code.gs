@@ -58,6 +58,10 @@ function doGet(e) {
         result = handleGetUsuarios();
         break;
 
+      case "getUbicacionesLX03":
+        result = handleGetUbicacionesLX03(params.material);
+        break;
+
       default:
         result = { success: false, message: "Acción GET no soportada: " + action };
     }
@@ -98,6 +102,10 @@ function doPost(e) {
 
       case "liberarMaterial":
         result = handleLiberarMaterial(payload.material, payload.pasillo, payload.usuario);
+        break;
+
+      case "getUbicacionesLX03":
+        result = handleGetUbicacionesLX03(payload.material);
         break;
 
       default:
@@ -231,6 +239,7 @@ function handleGetMaterialByPasillo(pasilloInput, usuarioInput, excludeRaw) {
   }
 
   const data = sheetBase.getDataRange().getValues();
+  const displayData = sheetBase.getDataRange().getDisplayValues();
   if (data.length <= 1) {
     return { success: false, message: "La hoja de inventario no contiene registros" };
   }
@@ -240,7 +249,25 @@ function handleGetMaterialByPasillo(pasilloInput, usuarioInput, excludeRaw) {
   const idxPasillo = findColumnIndex(headers, ["pasillo", "aisle", "rack"]);
   const idxMaterial = findColumnIndex(headers, ["material", "codigo", "sku", "articulo", "clave"]);
   const idxDesc = findColumnIndex(headers, ["descripcion", "desc", "producto", "nombre"]);
-  const idxPorcentaje = findColumnIndex(headers, ["porcentaje", "pct", "%", "avance", "porcentajeavance"]);
+  
+  // Columna K (índice 10) = PORCENTAJE (especificado explícitamente por el usuario)
+  let idxPorcentaje = 10;
+  if (headers.length > 10 && normalizeHeader(headers[10]).includes("porcentaje")) {
+    idxPorcentaje = 10;
+  } else {
+    const idxP = findColumnIndex(headers, ["porcentaje"]);
+    if (idxP !== -1) idxPorcentaje = idxP;
+  }
+
+  // Columna D (índice 3) = Ctd. UMB (Total a surtir especificado explícitamente por el usuario)
+  let idxCtdUmb = 3;
+  if (headers.length > 3 && (normalizeHeader(headers[3]).includes("umb") || normalizeHeader(headers[3]).includes("ctd"))) {
+    idxCtdUmb = 3;
+  } else {
+    const idxC = findColumnIndex(headers, ["ctdumb", "ctd", "cantidadumb", "umb"]);
+    if (idxC !== -1) idxCtdUmb = idxC;
+  }
+
   const idxPickeo = findColumnIndex(headers, ["ubicaciondepickeo", "ubicacionpickeo", "pickeo", "ubicacion", "posicion"]);
   const idxP01 = findColumnIndex(headers, ["p01", "p1", "cantidaddep01", "cantp01"]);
   const idxP02 = findColumnIndex(headers, ["p02", "p2", "cantidaddep02", "cantp02"]);
@@ -278,8 +305,12 @@ function handleGetMaterialByPasillo(pasilloInput, usuarioInput, excludeRaw) {
       const matCodeLower = matCode.toLowerCase();
       const estatus = idxEstatus !== -1 ? String(row[idxEstatus] || "").trim() : "";
       const estatusLower = estatus.toLowerCase();
+
+      // Leer columna K (PORCENTAJE) y columna D (Ctd. UMB)
+      const porcentajeDisplay = displayData ? displayData[i][idxPorcentaje] : "";
       const porcentajeRaw = row[idxPorcentaje];
-      const porcentajeNum = parsePercentage(porcentajeRaw);
+      const porcentajeNum = parsePercentage(porcentajeDisplay || porcentajeRaw);
+      const ctdUmb = parseQty(row[idxCtdUmb]);
 
       // Verificación 1: ¿Ya está completado en Base Proyecto o en Productividad?
       const yaCompletado = estatusLower.includes("complet") || 
@@ -298,8 +329,10 @@ function handleGetMaterialByPasillo(pasilloInput, usuarioInput, excludeRaw) {
         pasillo: rowPasillo,
         material: matCode,
         descripcion: idxDesc !== -1 ? String(row[idxDesc] || "") : "",
-        porcentajeRaw: porcentajeRaw,
+        porcentajeRaw: porcentajeDisplay || porcentajeRaw,
         porcentaje: porcentajeNum,
+        ctdUMB: ctdUmb,
+        totalSurtir: ctdUmb,
         ubicacionPickeo: idxPickeo !== -1 ? String(row[idxPickeo] || "") : "",
         p01: idxP01 !== -1 ? parseQty(row[idxP01]) : 0,
         p02: idxP02 !== -1 ? parseQty(row[idxP02]) : 0,
@@ -399,7 +432,7 @@ function handleSaveProductividad(payload) {
     parseQty(payload.p01),
     parseQty(payload.p02),
     parseQty(payload.p03),
-    parseQty(payload.p01) + parseQty(payload.p02) + parseQty(payload.p03), // Total piezas
+    (payload.totalSurtir !== undefined && payload.totalSurtir !== null) ? parseQty(payload.totalSurtir) : (parseQty(payload.p01) + parseQty(payload.p02) + parseQty(payload.p03)), // Total piezas (Ctd. UMB de Columna D)
     payload.porcentaje || 0,
     payload.estado || "Asignado",                // Asignado | En Proceso | Completado
     payload.minutosTranscurridos || 0,
@@ -641,6 +674,93 @@ function handleSaveUsuario(payload) {
   return { success: true, message: "Usuario creado exitosamente" };
 }
 
+/**
+ * 9. Consultar todas las ubicaciones y stock disponible del material en pestaña LX03 (tipo P02)
+ *    - Pestaña: LX03
+ *    - Columna A: tp (solo registros donde tp == "P02")
+ *    - Columna D: Ubicación
+ *    - Columna J: Stock disponible
+ */
+function handleGetUbicacionesLX03(materialInput) {
+  if (!materialInput) {
+    return { success: false, message: "Debe especificar el código de material" };
+  }
+
+  const ssBase = SpreadsheetApp.openById(ID_SHEET_BASE);
+  const sheetLX03 = ssBase.getSheetByName("LX03");
+  if (!sheetLX03) {
+    return { success: false, message: "No se encontró la pestaña 'LX03' en el libro de inventario" };
+  }
+
+  const data = sheetLX03.getDataRange().getValues();
+  if (data.length <= 1) {
+    return { success: true, material: materialInput, ubicaciones: [], totalStockDisponible: 0, message: "La hoja LX03 no contiene registros" };
+  }
+
+  const headers = data[0].map(h => normalizeHeader(h));
+  
+  // Columna A = tp (índice 0)
+  let idxTp = 0;
+  // Columna D = Ubicación (índice 3)
+  let idxUbicacion = 3;
+  // Columna J = Stock disponible (índice 9)
+  let idxStock = 9;
+
+  // Buscar columna de material por cabecera
+  let idxMaterial = findColumnIndex(headers, ["material", "codigo", "sku", "articulo", "clave", "producto"]);
+
+  const cleanMat = String(materialInput).trim().toLowerCase();
+  const ubicaciones = [];
+  let totalStock = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const tpVal = String(row[idxTp] || "").trim().toUpperCase();
+
+    // Filtro estricto: solo P02 de la Columna A (título tp)
+    if (tpVal === "P02" || tpVal.startsWith("P02")) {
+      let coincideMat = false;
+
+      const cleanMatNoZero = cleanMat.replace(/^0+/, "");
+
+      if (idxMaterial !== -1) {
+        const matVal = String(row[idxMaterial] || "").trim().toLowerCase();
+        const matValNoZero = matVal.replace(/^0+/, "");
+        coincideMat = (matVal === cleanMat || (cleanMatNoZero !== "" && matValNoZero === cleanMatNoZero) || (parseFloat(matVal) === parseFloat(cleanMat) && !isNaN(parseFloat(cleanMat))));
+      } else {
+        // Si no se encuentra columna por nombre, buscar coincidencia en las columnas de la fila
+        for (let c = 0; c < row.length; c++) {
+          const colVal = String(row[c] || "").trim().toLowerCase();
+          const colValNoZero = colVal.replace(/^0+/, "");
+          if (colVal === cleanMat || (cleanMatNoZero !== "" && colValNoZero === cleanMatNoZero) || (parseFloat(colVal) === parseFloat(cleanMat) && !isNaN(parseFloat(cleanMat)) && cleanMat.length > 2)) {
+            coincideMat = true;
+            break;
+          }
+        }
+      }
+
+      if (coincideMat) {
+        const ubicacionVal = String(row[idxUbicacion] || "").trim();
+        const stockVal = parseQty(row[idxStock]);
+        totalStock += stockVal;
+
+        ubicaciones.push({
+          tp: tpVal,
+          ubicacion: ubicacionVal || "Sin Ubicación",
+          stockDisponible: stockVal
+        });
+      }
+    }
+  }
+
+  return {
+    success: true,
+    material: materialInput,
+    ubicaciones: ubicaciones,
+    totalStockDisponible: totalStock
+  };
+}
+
 // ==========================================================================
 // HELPERS & INICIALIZADORES
 // ==========================================================================
@@ -667,10 +787,15 @@ function findColumnIndex(headers, candidates) {
 
 function parsePercentage(val) {
   if (val === undefined || val === null || val === "") return 0;
+  if (typeof val === "string" && val.includes("%")) {
+    const clean = val.replace("%", "").replace(",", ".").trim();
+    const num = parseFloat(clean);
+    return isNaN(num) ? 0 : num;
+  }
   if (typeof val === "number") {
     return val <= 1 && val > 0 ? val * 100 : val;
   }
-  const clean = String(val).replace("%", "").replace(",", ".").trim();
+  const clean = String(val).replace(",", ".").trim();
   const num = parseFloat(clean);
   if (isNaN(num)) return 0;
   return num <= 1 && num > 0 ? num * 100 : num;

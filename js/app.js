@@ -342,14 +342,27 @@ function cargarTarjetaMaterial(mat, pasillo) {
   document.getElementById("mat-card-descripcion").textContent = mat.descripcion || "Sin descripción";
   document.getElementById("mat-card-pickeo").textContent = mat.ubicacionPickeo || "Sin ubicación asignada";
   
-  const pct = Math.round(mat.porcentaje || 0);
-  document.getElementById("mat-card-porcentaje").textContent = `${pct}%`;
+  // Porcentaje tomado estrictamente de la Columna K (PORCENTAJE) de la pestaña "Base Proyecto"
+  let pctDisplay = "";
+  if (mat.porcentajeRaw !== undefined && mat.porcentajeRaw !== null && String(mat.porcentajeRaw).trim() !== "") {
+    const rawStr = String(mat.porcentajeRaw).trim();
+    pctDisplay = rawStr.includes("%") ? rawStr : `${rawStr}%`;
+  } else {
+    const pct = Math.round(mat.porcentaje || 0);
+    pctDisplay = `${pct}%`;
+  }
+  document.getElementById("mat-card-porcentaje").textContent = pctDisplay;
   
   document.getElementById("mat-card-p01").textContent = mat.p01 ?? 0;
   document.getElementById("mat-card-p02").textContent = mat.p02 ?? 0;
   document.getElementById("mat-card-p03").textContent = mat.p03 ?? 0;
 
-  const total = (Number(mat.p01) || 0) + (Number(mat.p02) || 0) + (Number(mat.p03) || 0);
+  // Total a Surtir tomado estrictamente de Columna D (Ctd. UMB) de la pestaña "Base Proyecto"
+  const total = (mat.ctdUMB !== undefined && mat.ctdUMB !== null) 
+    ? mat.ctdUMB 
+    : ((mat.totalSurtir !== undefined && mat.totalSurtir !== null) 
+      ? mat.totalSurtir 
+      : ((Number(mat.p01) || 0) + (Number(mat.p02) || 0) + (Number(mat.p03) || 0)));
   document.getElementById("mat-card-total").textContent = total;
 
   if (AppState.currentUser) {
@@ -371,6 +384,12 @@ async function registrarAsignacionProductividad(mat, pasillo) {
   const usuario = AppState.currentUser ? AppState.currentUser.usuario : "desconocido";
   const nombreOp = AppState.currentUser ? AppState.currentUser.nombre : "Operador";
 
+  const totalPiezas = (mat.ctdUMB !== undefined && mat.ctdUMB !== null) 
+    ? mat.ctdUMB 
+    : ((mat.totalSurtir !== undefined && mat.totalSurtir !== null) 
+      ? mat.totalSurtir 
+      : ((Number(mat.p01) || 0) + (Number(mat.p02) || 0) + (Number(mat.p03) || 0)));
+
   const payload = {
     usuario: usuario,
     nombreOperador: nombreOp,
@@ -381,6 +400,9 @@ async function registrarAsignacionProductividad(mat, pasillo) {
     p01: mat.p01,
     p02: mat.p02,
     p03: mat.p03,
+    ctdUMB: totalPiezas,
+    totalSurtir: totalPiezas,
+    totalPiezas: totalPiezas,
     porcentaje: mat.porcentaje,
     estado: "Asignado"
   };
@@ -541,6 +563,132 @@ function regresarAPasillos(forzar = false) {
     input.value = "";
     input.focus();
   }
+}
+
+/**
+ * Saltar Material: Permite al operador saltar el material actual sin trabajarlo,
+ * liberándolo de inmediato en el sistema para que otro operador pueda escogerlo,
+ * y consultando automáticamente el siguiente material con menor porcentaje de este pasillo.
+ */
+async function saltarMaterialActual() {
+  if (!AppState.currentMaterial) {
+    showToast("No hay material activo para saltar", "warning");
+    return;
+  }
+
+  const matCode = AppState.currentMaterial.material;
+  const pasillo = AppState.currentPasillo;
+  const usuario = AppState.currentUser?.usuario || "";
+
+  const confirmar = confirm(`¿Deseas saltar el material ${matCode}?\n\nSe liberará en el sistema para que otro operador pueda trabajarlo y se te mostrará el siguiente material con menor porcentaje.`);
+  if (!confirmar) return;
+
+  try {
+    // 1. Liberar el material en Google Sheets / Demo para que quede disponible a otros operadores
+    await API.liberarMaterial(matCode, pasillo, usuario);
+    AppState.currentMaterialStatus = "Liberado";
+    detenerCronometro();
+
+    // 2. Asegurarse de que esté en la lista de exclusión de esta sesión para este operador
+    if (!AppState.sessionProcessedMaterials.includes(matCode)) {
+      AppState.sessionProcessedMaterials.push(matCode);
+    }
+
+    showToast(`Material ${matCode} saltado y liberado. Buscando siguiente con menor %...`, "info");
+    playAudioNotification("beep");
+
+    // 3. Consultar el siguiente material con menor porcentaje del mismo pasillo
+    await consultarMaterialPasillo(true);
+
+  } catch (err) {
+    showToast("Error al saltar material: " + err.message, "error");
+  }
+}
+
+/**
+ * Consulta y muestra en modal todas las ubicaciones y cantidades de stock disponible
+ * del material actual desde la pestaña LX03, filtrando estrictamente por tp == "P02".
+ */
+async function consultarUbicacionesLX03() {
+  if (!AppState.currentMaterial) {
+    showToast("No hay un material seleccionado", "warning");
+    return;
+  }
+
+  const matCode = AppState.currentMaterial.material;
+  const modal = document.getElementById("modal-ubicaciones-lx03");
+  const matEl = document.getElementById("modal-lx03-material");
+  const totalStockEl = document.getElementById("modal-lx03-total-stock");
+  const loadingEl = document.getElementById("modal-lx03-loading");
+  const contentEl = document.getElementById("modal-lx03-content");
+  const tbodyEl = document.getElementById("modal-lx03-tbody");
+  const emptyEl = document.getElementById("modal-lx03-empty");
+
+  if (matEl) matEl.textContent = `${matCode} - ${AppState.currentMaterial.descripcion || ""}`;
+  if (totalStockEl) totalStockEl.textContent = "...";
+  if (tbodyEl) tbodyEl.innerHTML = "";
+
+  if (loadingEl) loadingEl.classList.remove("hidden");
+  if (contentEl) contentEl.classList.add("hidden");
+  if (emptyEl) emptyEl.classList.add("hidden");
+  if (modal) modal.classList.remove("hidden");
+  initIcons();
+
+  try {
+    const res = await API.getUbicacionesLX03(matCode);
+
+    if (loadingEl) loadingEl.classList.add("hidden");
+
+    if (res.success && res.ubicaciones && res.ubicaciones.length > 0) {
+      if (totalStockEl) totalStockEl.textContent = res.totalStockDisponible ?? 0;
+
+      let html = "";
+      res.ubicaciones.forEach(item => {
+        html += `
+          <tr class="hover:bg-blue-50/40 transition-colors">
+            <td class="py-2.5 px-3">
+              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                ${item.tp || "P02"}
+              </span>
+            </td>
+            <td class="py-2.5 px-3">
+              <span class="font-extrabold text-slate-900 text-sm tracking-tight">${item.ubicacion}</span>
+            </td>
+            <td class="py-2.5 px-3 text-right">
+              <span class="font-black text-emerald-600 text-sm">${item.stockDisponible}</span>
+              <span class="text-[10px] text-slate-400 font-medium"> pzas</span>
+            </td>
+          </tr>
+        `;
+      });
+
+      if (tbodyEl) tbodyEl.innerHTML = html;
+      if (contentEl) contentEl.classList.remove("hidden");
+    } else {
+      if (totalStockEl) totalStockEl.textContent = "0";
+      if (emptyEl) {
+        emptyEl.classList.remove("hidden");
+        const msg = res.message || "No se encontraron ubicaciones tipo P02 para este material en LX03.";
+        const msgP = emptyEl.querySelector("p");
+        if (msgP) msgP.textContent = msg;
+      }
+    }
+  } catch (err) {
+    if (loadingEl) loadingEl.classList.add("hidden");
+    if (emptyEl) {
+      emptyEl.classList.remove("hidden");
+      const msgP = emptyEl.querySelector("p");
+      if (msgP) msgP.textContent = "Error al consultar LX03: " + err.message;
+    }
+    showToast("Error al consultar LX03: " + err.message, "error");
+  } finally {
+    initIcons();
+  }
+}
+
+function cerrarModalUbicacionesLX03() {
+  const modal = document.getElementById("modal-ubicaciones-lx03");
+  if (modal) modal.classList.add("hidden");
 }
 
 // ==========================================================================

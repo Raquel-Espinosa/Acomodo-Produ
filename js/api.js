@@ -11,19 +11,29 @@ const API = {
       { usuario: "admin", nombre: "Carlos Supervisor", password: "admin", rol: "Administrativo", activo: "SI" }
     ],
     baseProyecto: [
-      { pasillo: "1", material: "MAT-10023", descripcion: "Alimento Seco Adulto Raza Mediana 15kg", porcentaje: 12, ubicacionPickeo: "P1-A-04", p01: 24, p02: 12, p03: 6, estatus: "Pendiente", asignadoA: "" },
-      { pasillo: "1", material: "MAT-10088", descripcion: "Snacks Premios Hueso sabor Pollo 200g", porcentaje: 45, ubicacionPickeo: "P1-B-12", p01: 50, p02: 30, p03: 20, estatus: "Pendiente", asignadoA: "" },
-      { pasillo: "1", material: "MAT-10142", descripcion: "Shampoo Hipoalergénico Mascota 500ml", porcentaje: 80, ubicacionPickeo: "P1-C-02", p01: 10, p02: 5, p03: 0, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "1", material: "MAT-10023", descripcion: "Alimento Seco Adulto Raza Mediana 15kg", porcentaje: 12, ctdUMB: 42, ubicacionPickeo: "P1-A-04", p01: 24, p02: 12, p03: 6, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "1", material: "MAT-10088", descripcion: "Snacks Premios Hueso sabor Pollo 200g", porcentaje: 45, ctdUMB: 100, ubicacionPickeo: "P1-B-12", p01: 50, p02: 30, p03: 20, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "1", material: "MAT-10142", descripcion: "Shampoo Hipoalergénico Mascota 500ml", porcentaje: 80, ctdUMB: 15, ubicacionPickeo: "P1-C-02", p01: 10, p02: 5, p03: 0, estatus: "Pendiente", asignadoA: "" },
       
-      { pasillo: "2", material: "MAT-20050", descripcion: "Arena Sanitaria Aglomerante Lavanda 10kg", porcentaje: 8, ubicacionPickeo: "P2-A-01", p01: 40, p02: 25, p03: 15, estatus: "Pendiente", asignadoA: "" },
-      { pasillo: "2", material: "MAT-20091", descripcion: "Rascador para Gato 3 Niveles con Juguete", porcentaje: 35, ubicacionPickeo: "P2-B-08", p01: 8, p02: 4, p03: 2, estatus: "Pendiente", asignadoA: "" },
-      { pasillo: "2", material: "MAT-20110", descripcion: "Collar Antipulgas Perro Grande 65cm", porcentaje: 90, ubicacionPickeo: "P2-C-15", p01: 15, p02: 10, p03: 5, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "2", material: "MAT-20050", descripcion: "Arena Sanitaria Aglomerante Lavanda 10kg", porcentaje: 8, ctdUMB: 80, ubicacionPickeo: "P2-A-01", p01: 40, p02: 25, p03: 15, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "2", material: "MAT-20091", descripcion: "Rascador para Gato 3 Niveles con Juguete", porcentaje: 35, ctdUMB: 14, ubicacionPickeo: "P2-B-08", p01: 8, p02: 4, p03: 2, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "2", material: "MAT-20110", descripcion: "Collar Antipulgas Perro Grande 65cm", porcentaje: 90, ctdUMB: 30, ubicacionPickeo: "P2-C-15", p01: 15, p02: 10, p03: 5, estatus: "Pendiente", asignadoA: "" },
 
-      { pasillo: "3", material: "MAT-30015", descripcion: "Cama Ortopédica Grande Memory Foam", porcentaje: 5, ubicacionPickeo: "P3-A-02", p01: 12, p02: 6, p03: 4, estatus: "Pendiente", asignadoA: "" },
-      { pasillo: "3", material: "MAT-30045", descripcion: "Correa Retráctil 5 Metros Resistente", porcentaje: 28, ubicacionPickeo: "P3-B-04", p01: 30, p02: 15, p03: 10, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "3", material: "MAT-30015", descripcion: "Cama Ortopédica Grande Memory Foam", porcentaje: 5, ctdUMB: 22, ubicacionPickeo: "P3-A-02", p01: 12, p02: 6, p03: 4, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "3", material: "MAT-30045", descripcion: "Correa Retráctil 5 Metros Resistente", porcentaje: 28, ctdUMB: 55, ubicacionPickeo: "P3-B-04", p01: 30, p02: 15, p03: 10, estatus: "Pendiente", asignadoA: "" },
 
-      { pasillo: "4", material: "MAT-40012", descripcion: "Transportadora Rígida IATA Mediana", porcentaje: 15, ubicacionPickeo: "P4-A-10", p01: 14, p02: 8, p03: 4, estatus: "Pendiente", asignadoA: "" },
-      { pasillo: "5", material: "MAT-50020", descripcion: "Comedero Automático Programable 4L", porcentaje: 22, ubicacionPickeo: "P5-A-05", p01: 16, p02: 8, p03: 6, estatus: "Pendiente", asignadoA: "" }
+      { pasillo: "4", material: "MAT-40012", descripcion: "Transportadora Rígida IATA Mediana", porcentaje: 15, ctdUMB: 26, ubicacionPickeo: "P4-A-10", p01: 14, p02: 8, p03: 4, estatus: "Pendiente", asignadoA: "" },
+      { pasillo: "5", material: "MAT-50020", descripcion: "Comedero Automático Programable 4L", porcentaje: 22, ctdUMB: 30, ubicacionPickeo: "P5-A-05", p01: 16, p02: 8, p03: 6, estatus: "Pendiente", asignadoA: "" }
+    ],
+    lx03: [
+      { tp: "P02", material: "MAT-10023", ubicacion: "UB-01-A-10", stockDisponible: 120 },
+      { tp: "P02", material: "MAT-10023", ubicacion: "UB-01-B-04", stockDisponible: 55 },
+      { tp: "P01", material: "MAT-10023", ubicacion: "UB-01-A-01", stockDisponible: 80 }, // No P02 para probar filtro
+      { tp: "P02", material: "MAT-10088", ubicacion: "UB-01-C-02", stockDisponible: 300 },
+      { tp: "P02", material: "MAT-20050", ubicacion: "UB-02-A-15", stockDisponible: 85 },
+      { tp: "P02", material: "MAT-30015", ubicacion: "UB-03-D-01", stockDisponible: 40 },
+      { tp: "P02", material: "MAT-40012", ubicacion: "UB-04-A-08", stockDisponible: 60 },
+      { tp: "P02", material: "MAT-50020", ubicacion: "UB-05-B-12", stockDisponible: 95 }
     ],
     productividad: []
   },
@@ -31,6 +41,7 @@ const API = {
   _mockData: {
     usuarios: [],
     baseProyecto: [],
+    lx03: [],
     productividad: []
   },
 
@@ -57,7 +68,16 @@ const API = {
       this._mockData.baseProyecto = JSON.parse(JSON.stringify(this._initialData.baseProyecto));
     }
 
-    // 3. Productividad
+    // 3. LX03 (Ubicaciones y Stock)
+    const savedLX03 = localStorage.getItem("acomodo_mock_lx03");
+    if (savedLX03) {
+      try { this._mockData.lx03 = JSON.parse(savedLX03); } catch(e) {}
+    }
+    if (!this._mockData.lx03 || this._mockData.lx03.length === 0) {
+      this._mockData.lx03 = JSON.parse(JSON.stringify(this._initialData.lx03));
+    }
+
+    // 4. Productividad
     const savedProd = localStorage.getItem("acomodo_mock_productividad");
     if (savedProd) {
       try { this._mockData.productividad = JSON.parse(savedProd); } catch(e) {}
@@ -70,6 +90,7 @@ const API = {
   _saveData() {
     try {
       localStorage.setItem("acomodo_mock_base_proyecto", JSON.stringify(this._mockData.baseProyecto));
+      localStorage.setItem("acomodo_mock_lx03", JSON.stringify(this._mockData.lx03));
       localStorage.setItem("acomodo_mock_productividad", JSON.stringify(this._mockData.productividad));
       localStorage.setItem("acomodo_mock_usuarios", JSON.stringify(this._mockData.usuarios));
     } catch(e) {
@@ -79,6 +100,7 @@ const API = {
 
   resetDemoData() {
     localStorage.removeItem("acomodo_mock_base_proyecto");
+    localStorage.removeItem("acomodo_mock_lx03");
     localStorage.removeItem("acomodo_mock_productividad");
     localStorage.removeItem("acomodo_mock_usuarios");
     this._initData();
@@ -258,6 +280,8 @@ const API = {
     // 5. Bloquear y marcar como Asignado
     materialElegido.estatus = "Asignado";
     materialElegido.asignadoA = cleanUsuario || "operador";
+    materialElegido.ctdUMB = materialElegido.ctdUMB !== undefined ? materialElegido.ctdUMB : ((Number(materialElegido.p01) || 0) + (Number(materialElegido.p02) || 0) + (Number(materialElegido.p03) || 0));
+    materialElegido.totalSurtir = materialElegido.ctdUMB;
     this._saveData();
 
     return {
@@ -459,6 +483,54 @@ const API = {
 
     this._saveData();
     return { success: true, message: "Usuario creado exitosamente" };
+  },
+
+  /**
+   * 9. Consultar todas las ubicaciones y stock disponible del material en pestaña LX03 (solo P02)
+   */
+  async getUbicacionesLX03(material) {
+    if (this.isLive()) {
+      try {
+        return await this._fetchGet({ action: "getUbicacionesLX03", material });
+      } catch (e) {
+        console.warn("Falla al consultar LX03 en vivo, recurriendo a datos locales:", e);
+      }
+    }
+
+    // Fallback Modo Demo
+    await new Promise(r => setTimeout(r, 200));
+    const cleanMat = String(material || "").trim().toLowerCase();
+    const cleanMatNoZero = cleanMat.replace(/^0+/, "");
+
+    const ubicaciones = [];
+    let totalStock = 0;
+
+    (this._mockData.lx03 || []).forEach(item => {
+      const tp = String(item.tp || "").trim().toUpperCase();
+      const mat = String(item.material || "").trim().toLowerCase();
+      const matNoZero = mat.replace(/^0+/, "");
+
+      // Filtro estricto: solo P02 de la columna A
+      if (tp === "P02" || tp.startsWith("P02")) {
+        const coincide = (mat === cleanMat || (cleanMatNoZero !== "" && matNoZero === cleanMatNoZero));
+        if (coincide) {
+          const qty = Number(item.stockDisponible) || 0;
+          totalStock += qty;
+          ubicaciones.push({
+            tp: item.tp,
+            ubicacion: item.ubicacion || "Sin Ubicación",
+            stockDisponible: qty
+          });
+        }
+      }
+    });
+
+    return {
+      success: true,
+      material: material,
+      ubicaciones: ubicaciones,
+      totalStockDisponible: totalStock
+    };
   },
 
   /**
