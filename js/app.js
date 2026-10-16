@@ -610,13 +610,31 @@ async function saltarMaterialActual() {
  * del material actual desde la pestaña LX03, filtrando estrictamente por tp == "P02".
  */
 async function consultarUbicacionesLX03() {
-  if (!AppState.currentMaterial) {
-    showToast("No hay un material seleccionado", "warning");
+  const modal = document.getElementById("modal-ubicaciones-lx03");
+  if (!modal) {
+    console.error("No se encontró el elemento modal-ubicaciones-lx03");
+    showToast("Error interno: No se encontró la ventana modal", "error");
     return;
   }
 
-  const matCode = AppState.currentMaterial.material;
-  const modal = document.getElementById("modal-ubicaciones-lx03");
+  // Obtener código de material desde AppState o directamente desde la tarjeta visible
+  let matCode = AppState.currentMaterial ? AppState.currentMaterial.material : "";
+  let matDesc = AppState.currentMaterial ? AppState.currentMaterial.descripcion : "";
+
+  if (!matCode) {
+    const codeEl = document.getElementById("mat-card-codigo");
+    if (codeEl && codeEl.textContent && codeEl.textContent !== "S/C") {
+      matCode = codeEl.textContent.trim();
+    }
+    const descEl = document.getElementById("mat-card-descripcion");
+    if (descEl) matDesc = descEl.textContent.trim();
+  }
+
+  if (!matCode) {
+    showToast("Por favor selecciona un pasillo y material primero", "warning");
+    return;
+  }
+
   const matEl = document.getElementById("modal-lx03-material");
   const totalStockEl = document.getElementById("modal-lx03-total-stock");
   const loadingEl = document.getElementById("modal-lx03-loading");
@@ -624,14 +642,17 @@ async function consultarUbicacionesLX03() {
   const tbodyEl = document.getElementById("modal-lx03-tbody");
   const emptyEl = document.getElementById("modal-lx03-empty");
 
-  if (matEl) matEl.textContent = `${matCode} - ${AppState.currentMaterial.descripcion || ""}`;
+  if (matEl) matEl.textContent = `${matCode} - ${matDesc || ""}`;
   if (totalStockEl) totalStockEl.textContent = "...";
   if (tbodyEl) tbodyEl.innerHTML = "";
 
   if (loadingEl) loadingEl.classList.remove("hidden");
   if (contentEl) contentEl.classList.add("hidden");
   if (emptyEl) emptyEl.classList.add("hidden");
-  if (modal) modal.classList.remove("hidden");
+
+  // Mostrar el modal forzando visualización flex
+  modal.classList.remove("hidden");
+  modal.style.display = "flex";
   initIcons();
 
   try {
@@ -688,7 +709,10 @@ async function consultarUbicacionesLX03() {
 
 function cerrarModalUbicacionesLX03() {
   const modal = document.getElementById("modal-ubicaciones-lx03");
-  if (modal) modal.classList.add("hidden");
+  if (modal) {
+    modal.classList.add("hidden");
+    modal.style.display = "none";
+  }
 }
 
 // ==========================================================================
